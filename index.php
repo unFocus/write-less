@@ -5,7 +5,6 @@
 $password = 'CHANGEME!';
 $jqueryurl = 'https://ajax.googleapis.com/ajax/libs/jquery/1.7.2/jquery.min.js';
 $lessjsurl = 'http://cdnjs.cloudflare.com/ajax/libs/less.js/1.3.0/less-1.3.0.min.js';
-$codemirrorbaseurl = '';
 
 // add a list of less files that will compiled as one (in order).
 $lessgroup = array();
@@ -103,12 +102,9 @@ else
 <meta charset="UTF-8" />
 	<title>Write LESS</title>
 	<script src="<?php echo $jqueryurl ?>"></script>
-	<link href="<?php echo $codemirrorbaseurl ?>lib/codemirror.css" rel="stylesheet">
-	<script src="<?php echo $codemirrorbaseurl ?>lib/codemirror.js"></script>
-	<script src="<?php echo $codemirrorbaseurl ?>mode/less/less.js"></script>
-	<script src="<?php echo $codemirrorbaseurl ?>mode/css/css.js"></script>
 	<script src="<?php echo $lessjsurl ?>"></script>
-	<link href="<?php echo $codemirrorbaseurl ?>theme/ambiance.css" rel="stylesheet">
+	<script src="CodeMirrorCustom-2.32.min.js"></script>
+	<link href="CodeMirrorCustom-2.32.min.css" rel="stylesheet">
 <style>
 body {
 	height: 100%;
