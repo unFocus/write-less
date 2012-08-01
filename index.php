@@ -242,7 +242,7 @@ jQuery( document ).ready( function( $ ) {
 			indentWithTabs: true,
 			tabSize: 4,
 			indentUnit: 4, 
-			onChange: compile,
+			onChange: pre_compile,
 		});
 		csseditor = CodeMirror.fromTextArea( cssElem, {
 			theme: "ambiance",
@@ -279,6 +279,12 @@ jQuery( document ).ready( function( $ ) {
 	}
 	function saved( data ) {
 		//console.log( data );
+	}
+	// simple rate limiter
+	var limit_id;
+	function pre_compile() {
+		clearTimeout( limit_id );
+		limit_id = setTimeout( compile, 500 );
 	}
 	function compile() {
 		lesseditor.save();
