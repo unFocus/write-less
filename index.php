@@ -4,8 +4,12 @@
  */
 $password = 'CHANGEME!';
 $jqueryurl = 'https://ajax.googleapis.com/ajax/libs/jquery/1.7.2/jquery.min.js';
-$lessjsurl = 'less-1.3.0.min.js';
-$codemirrorbaseurl = 'CodeMirror-2.32/';
+$lessjsurl = 'http://cdnjs.cloudflare.com/ajax/libs/less.js/1.3.0/less-1.3.0.min.js';
+$codemirrorbaseurl = '';
+
+// add a list of less files that will compiled as one (in order).
+$lessgroup = array();
+
 /* End of Config Section */
 
 $pass = ( $password === $_COOKIE['lessmakerpassword'] );
@@ -17,10 +21,19 @@ if ( $_REQUEST['ajaxsubmit'] && in_array( $_REQUEST['editfile'], $lessfiles ) &&
 	$newcss = stripslashes( $_REQUEST['css'] );
 	$lessfile = $_REQUEST['editfile'];
 	$cssfile = str_replace( '.less', '.css', $lessfile );
+	if ( in_array( $lessfile, $lessgroup ) )
+		$cssfile = 'lessgroup.css';
 	write_the_file( $lessfile, $newless );
 	write_the_file( $cssfile, $newcss );
 	exit();
 }
+
+// filters out the grouped less files - they'll be added back later, as optgroups.
+foreach ( $lessfiles as $i => $file ) {
+	if ( in_array( $file, $lessgroup ) )
+		unset( $lessfiles[ $i ] );
+}
+
 function write_the_file( $filename, $data ) {
 	if ( file_exists( $filename ) ) {
 		if ( is_writable( $filename ) ) {
@@ -61,6 +74,25 @@ $file = $_REQUEST['file'];
 $logout = isset( $_REQUEST['logout'] );
 $less = '';
 $error = false;
+$preless = '';
+$postless = '';
+if ( in_array($file, $lessgroup ) )
+{
+	$pre = true;
+	foreach( $lessgroup as $gfile ) {
+		if ( $pre ) {
+			if ( $gfile == $file ) {
+				$pre = false;
+				continue;
+			}
+			$preless .= file_get_contents( $gfile );
+		}
+		else
+			$postless .= file_get_contents( $gfile );
+	}
+	$less = file_get_contents( $file );
+}
+else
 if ( in_array( $file, $lessfiles ) )
 	$less = file_get_contents( $file );
 else
@@ -69,7 +101,7 @@ else
 <html>
 <head>
 <meta charset="UTF-8" />
-	<title>less maker</title>
+	<title>Write LESS</title>
 	<script src="<?php echo $jqueryurl ?>"></script>
 	<link href="<?php echo $codemirrorbaseurl ?>lib/codemirror.css" rel="stylesheet">
 	<script src="<?php echo $codemirrorbaseurl ?>lib/codemirror.js"></script>
@@ -130,7 +162,13 @@ textarea {
 	<input type="hidden" value="<?php echo $file ?>" name="editfile" autocomplete="off" />
 	<div style="overflow: hidden; height: 100%">
 		<div style="width: 49%; float: left; overflow: hidden; margin-right: 2%;">
+		<textarea style="display:none;" disabled id="preless" autocomplete="off"><?php
+			echo htmlentities( $preless, ENT_QUOTES, 'UTF-8' );
+		?></textarea>
 		<textarea id="less" name="less" autocomplete="off"><?php echo htmlentities( $less, ENT_QUOTES, 'UTF-8' ); ?></textarea>
+		<textarea style="display:none;" disabled id="postless" autocomplete="off"><?php
+			echo htmlentities( $postless, ENT_QUOTES, 'UTF-8' );
+		?></textarea>
 		</div>
 		<div style="width: 49%; float: left; overflow: hidden;">
 		<div id="error"></div>
@@ -151,7 +189,17 @@ textarea {
 		echo '<option' . $sel . '>' . $lessfile . '</option>';
 	}
 	?>
+	<?php if ( count( $lessgroup ) > 0 ): ?>
+	<optgroup label="lessgroup.less">
+		<?php 
+		foreach ( $lessgroup as $lessfile ) {
+			$sel = $lessfile == $file ? ' selected="selected"': '';
+			echo '<option' . $sel . '>' . $lessfile . '</option>';
+		}
+		?>
+	</optgroup>
 	</select>
+	<?php endif; ?>
 	<?php } else { ?>
 	<input type="password" name="lessmakerpassword" />
 	<?php } ?>
@@ -166,6 +214,8 @@ jQuery( document ).ready( function( $ ) {
 		$form = $('#editors'),
 		$control = $('#control'),
 		parser = new( less.Parser ),
+		preless = (document.getElementById("preless") || {value:""}).value,
+		postless = (document.getElementById("postless") || {value:""}).value,
 		lesseditor,
 		csseditor,
 		errorLine, errorText,
@@ -232,7 +282,7 @@ jQuery( document ).ready( function( $ ) {
 	}
 	function compile() {
 		lesseditor.save();
-		parser.parse( lesseditor.getValue(), function ( err, tree ) {
+		parser.parse( preless + lesseditor.getValue() + postless, function ( err, tree ) {
 			if ( err  ){
 				doError( err );
 			} else {
@@ -261,7 +311,9 @@ jQuery( document ).ready( function( $ ) {
 		}
 		clearCompileError();
 		
-		errorLine = lesseditor.setMarker( err.line - 1, '<strong>*%N%</strong>', "cm-error");
+		var line = err.line - preless.split("\n").length;
+		
+		errorLine = lesseditor.setMarker( line, '<strong>*%N%</strong>', "cm-error");
 		lesseditor.setLineClass( errorLine, "cm-error");
 		
 		var pos = lesseditor.posFromIndex( err.index + 1 );
