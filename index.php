@@ -5,19 +5,31 @@
 $password = 'CHANGEME!';
 $jqueryurl = 'https://ajax.googleapis.com/ajax/libs/jquery/1.7.2/jquery.min.js';
 $lessjsurl = 'http://cdnjs.cloudflare.com/ajax/libs/less.js/1.3.0/less-1.3.0.min.js';
+$lessgroupfile = 'write-less-groups.json';
 
 // add a list of less files that will compiled as one (in order).
-$lessgroup = array();
+// Use a json file like so:
+/* // write-less-groups.json
+[
+	"file1.less",
+	"file2.less"
+]
+*/
 
 /* End of Config Section */
 
 
 
 // Check password
-$pass = ( $password === $_COOKIE['lessmakerpassword'] );
+$pass = ( isset( $_COOKIE['lessmakerpassword'] ) && $password === $_COOKIE['lessmakerpassword'] );
 
 // Move up a directory
 chdir('../');
+
+$lessgroup = array();
+if ( file_exists( $lessgroupfile ) )
+	$lessgroup = json_decode( file_get_contents( $lessgroupfile ) );
+
 
 // Collect all LESS files
 $lessfiles = glob( '*.less' );
@@ -29,7 +41,7 @@ $cssfiles = glob( '*.css' );
 // Check if the request was a load or a submit
 // Check editfile request matches an actual file
 // Check Password
-if ( $_REQUEST['ajaxsubmit'] && in_array( $_REQUEST['editfile'], $lessfiles ) && $pass ) {
+if ( isset( $_REQUEST['ajaxsubmit'] ) && $_REQUEST['ajaxsubmit'] && in_array( $_REQUEST['editfile'], $lessfiles ) && $pass ) {
 	
 	$newless = stripslashes( $_REQUEST['less'] ); // Contains the less data
 	$newcss = stripslashes( $_REQUEST['css'] ); // Contains the css data
@@ -90,7 +102,7 @@ function write_the_file( $filename, $data ) {
 }
 
 
-$file = $_REQUEST['file'];
+$file = empty( $_REQUEST['file'] ) ? '' : $_REQUEST['file'];
 $logout = isset( $_REQUEST['logout'] );
 $less = '';
 $error = false;
