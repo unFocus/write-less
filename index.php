@@ -11,19 +11,38 @@ $lessgroup = array();
 
 /* End of Config Section */
 
+
+
+// Check password
 $pass = ( $password === $_COOKIE['lessmakerpassword'] );
+
+// Move up a directory
 chdir('../');
+
+// Collect all LESS files
 $lessfiles = glob( '*.less' );
+
+// Collect all CSS files
 $cssfiles = glob( '*.css' );
+
+// Handle Save:
+// Check if the request was a load or a submit
+// Check editfile request matches an actual file
+// Check Password
 if ( $_REQUEST['ajaxsubmit'] && in_array( $_REQUEST['editfile'], $lessfiles ) && $pass ) {
-	$newless = stripslashes( $_REQUEST['less'] );
-	$newcss = stripslashes( $_REQUEST['css'] );
-	$lessfile = $_REQUEST['editfile'];
-	$cssfile = str_replace( '.less', '.css', $lessfile );
+	
+	$newless = stripslashes( $_REQUEST['less'] ); // Contains the less data
+	$newcss = stripslashes( $_REQUEST['css'] ); // Contains the css data
+	$lessfile = $_REQUEST['editfile']; // requested File name
+	$cssfile = str_replace( '.less', '.css', $lessfile ); // assumes css File name default
+	
+	// If group, concatinate all css into one file (because of dependancies).
 	if ( in_array( $lessfile, $lessgroup ) )
-		$cssfile = 'lessgroup.css';
+		$cssfile = 'lessgroup.css'; // overwrites assumed css file name.
+	
 	write_the_file( $lessfile, $newless );
 	write_the_file( $cssfile, $newcss );
+	
 	exit();
 }
 
@@ -69,33 +88,40 @@ function write_the_file( $filename, $data ) {
 		}
 	}
 }
+
+
 $file = $_REQUEST['file'];
 $logout = isset( $_REQUEST['logout'] );
 $less = '';
 $error = false;
 $preless = '';
 $postless = '';
-if ( in_array($file, $lessgroup ) )
+
+if ( in_array($file, $lessgroup ) ) // File is in a Group
 {
 	$pre = true;
 	foreach( $lessgroup as $gfile ) {
-		if ( $pre ) {
+		if ( $pre ) { // dependancies, before current file
 			if ( $gfile == $file ) {
 				$pre = false;
 				continue;
 			}
 			$preless .= file_get_contents( $gfile );
 		}
-		else
+		else // dependancies, after current file
 			$postless .= file_get_contents( $gfile );
 	}
+	// Current file
 	$less = file_get_contents( $file );
 }
-else
-if ( in_array( $file, $lessfiles ) )
+else if ( in_array( $file, $lessfiles ) ) // File is standalone
+{
 	$less = file_get_contents( $file );
-else
+}
+else // File is not whitelisted
+{
 	$error = true;
+}
 ?>
 <html>
 <head>
