@@ -10,14 +10,24 @@ $lessgroupfile = 'write-less-groups.json';
 // add a list of less files that will compiled as one (in order).
 // Use a json file like so:
 /* // write-less-groups.json
-[
-	"file1.less",
-	"file2.less"
-]
+{
+	"lessgroup.css" : [
+		"variables.less",
+		"mixins.less",
+		"normalize.less",
+		"main.less",
+		"responsive.less",
+		"print.less"
+	],
+	"other.css" : [
+		"variables.less",
+		"mixins.less",
+		"normalize.less",
+	]
+}
 */
 
 /* End of Config Section */
-
 
 
 // Check password
@@ -26,10 +36,17 @@ $pass = ( isset( $_COOKIE['lessmakerpassword'] ) && $password === $_COOKIE['less
 // Move up a directory
 chdir('../');
 
-$lessgroup = array();
-if ( file_exists( $lessgroupfile ) )
-	$lessgroup = json_decode( file_get_contents( $lessgroupfile ) );
-
+//$lessgroup = array();
+$lessgroups = array();
+if ( file_exists( $lessgroupfile ) ) {
+	$lessgroups = json_decode( file_get_contents( $lessgroupfile ), true );
+	if ( ! is_array( $lessgroups ) ) $lessgroups = array();
+	$values = array_values( $lessgroups );
+	$values = array_shift( $values );
+	if ( ! empty( $lessgroups ) && ! is_array( $values ) )
+		$lessgroups = array( "lessgroup.css" => $lessgroups );
+	unset( $values );
+}
 
 // Collect all LESS files
 $lessfiles = glob( '*.less' );
@@ -44,59 +61,77 @@ $cssfiles = glob( '*.css' );
 if ( isset( $_REQUEST['ajaxsubmit'] ) && $_REQUEST['ajaxsubmit'] && in_array( $_REQUEST['editfile'], $lessfiles ) && $pass ) {
 	
 	$newless = stripslashes( $_REQUEST['less'] ); // Contains the less data
-	$newcss = stripslashes( $_REQUEST['css'] ); // Contains the css data
 	$lessfile = $_REQUEST['editfile']; // requested File name
 	$cssfile = str_replace( '.less', '.css', $lessfile ); // assumes css File name default
+	$newcss = $_REQUEST['css']; // Contains the css data
 	
-	// If group, concatinate all css into one file (because of dependancies).
-	if ( in_array( $lessfile, $lessgroup ) )
-		$cssfile = 'lessgroup.css'; // overwrites assumed css file name.
+	if ( is_array( $newcss ) ) {
+		foreach ( $newcss as $stylesheet => $styles ) {
+			if ( array_key_exists( $stylesheet, $lessgroups ) )
+				write_the_file( $stylesheet, stripslashes( $styles ) );
+		}
+	} else {
+		$newcss = stripslashes( $newcss ); // Contains the css data
+		
+		// If group, concatinate all css into one file (because of dependancies).
+		if ( ! empty( $lessgroups ) ) {
+			foreach ( $lessgroups as $name => $lessgroup ) {
+				if ( in_array( $lessfile, $lessgroup ) )
+					$cssfile = $name; // overwrites assumed css file name.
+				write_the_file( $cssfile, $newcss );
+			}
+		} else {
+			write_the_file( $cssfile, $newcss );
+		}
+	}
 	
 	write_the_file( $lessfile, $newless );
-	write_the_file( $cssfile, $newcss );
 	
 	exit();
 }
 
 // filters out the grouped less files - they'll be added back later, as optgroups.
 foreach ( $lessfiles as $i => $file ) {
-	if ( in_array( $file, $lessgroup ) )
-		unset( $lessfiles[ $i ] );
+	if ( ! empty( $lessgroups ) ) {
+		foreach ( $lessgroups as $name => $lessgroup ) {
+			if ( in_array( $file, $lessgroup ) )
+				unset( $lessfiles[ $i ] );
+		}
+	}
 }
-
 function write_the_file( $filename, $data ) {
 	if ( file_exists( $filename ) ) {
 		if ( is_writable( $filename ) ) {
 			if ( $handle = fopen( $filename, 'wb' ) ) {
 				if ( 0 < fwrite( $handle, $data ) ) {
-					echo "Successfully wrote to file ($filename)";
+					echo "Successfully wrote to file ($filename)".PHP_EOL;
 				} else if ( false === fwrite( $handle, $data ) ) {
-					echo "Cannot write to file ($filename)";
+					echo "Cannot write to file ($filename)".PHP_EOL;
 				} else if ( 0 === fwrite( $handle, $data ) ) {
-					echo "wrote 0 bytes to ($filename)";
+					echo "wrote 0 bytes to ($filename)".PHP_EOL;
 				}
 				fclose( $handle );
 				
 			} else {
-				echo "cannot open file ($filename)";
+				echo "cannot open file ($filename)".PHP_EOL;
 			}
 		} else {
-			echo "file ($filename) is not writable";
+			echo "file ($filename) is not writable".PHP_EOL;
 		}
 	} else {
 		if ( $handle = fopen( $filename, 'wb' ) ) {
-			echo "Successfully created file ($filename)";
+			echo "Successfully created file ($filename)".PHP_EOL;
 			if ( 0 < fwrite( $handle, $data ) ) {
-				echo "Successfully wrote to file ($filename)";
+				echo "Successfully wrote to file ($filename)".PHP_EOL;
 			} else if ( false === fwrite( $handle, $data ) ) {
-				echo "Cannot write to file ($filename)";
+				echo "Cannot write to file ($filename)".PHP_EOL;
 			} else if ( 0 === fwrite( $handle, $data ) ) {
-				echo "wrote 0 bytes to ($filename)";
+				echo "wrote 0 bytes to ($filename)".PHP_EOL;
 			}
 			fclose( $handle );
 			
 		} else {
-			echo "cannot open file ($filename)";
+			echo "cannot open file ($filename)".PHP_EOL;
 		}
 	}
 }
@@ -108,29 +143,40 @@ $less = '';
 $error = false;
 $preless = '';
 $postless = '';
+$filegroups = array();
+$contents = array();
 
-if ( in_array($file, $lessgroup ) ) // File is in a Group
+if ( in_array( $file, $lessfiles ) ) // Not in a group
 {
-	$pre = true;
-	foreach( $lessgroup as $gfile ) {
-		if ( $pre ) { // dependancies, before current file
-			if ( $gfile == $file ) {
-				$pre = false;
-				continue;
+	$less = file_get_contents( $file ); // File is whitelisted (by virtue of existing)
+}
+else if ( ! empty( $lessgroups ) ) {
+	foreach ( $lessgroups as $name => $lessgroup ) {
+		if ( in_array( $file, $lessgroup ) ) // File is in a Group
+		{
+			$pre = true;
+			$contents[$name] = array();
+			$filegroups[] = $name;
+			foreach( $lessgroup as $gfile ) {
+				if ( $pre ) { // dependancies, before current file
+					if ( $gfile == $file ) {
+						$pre = false;
+						continue;
+					}
+					$preless .= file_get_contents( $gfile );
+					$contents[$name]['preless'] = $preless;
+				}
+				else // dependancies, after current file
+					$postless .= file_get_contents( $gfile );
+					$contents[$name]['postless'] = $postless;
 			}
-			$preless .= file_get_contents( $gfile );
+			// Current file
+			if ( empty( $less ) ) 
+				$less = file_get_contents( $file );
 		}
-		else // dependancies, after current file
-			$postless .= file_get_contents( $gfile );
 	}
-	// Current file
-	$less = file_get_contents( $file );
 }
-else if ( in_array( $file, $lessfiles ) ) // File is standalone
-{
-	$less = file_get_contents( $file );
-}
-else // File is not whitelisted
+else
 {
 	$error = true;
 }
@@ -144,11 +190,12 @@ else // File is not whitelisted
 	<script src="CodeMirrorCustom-2.32.min.js"></script>
 	<link href="CodeMirrorCustom-2.32.min.css" rel="stylesheet">
 <style>
-body {
+
+/*html, body {
 	height: 100%;
 	margin: 0;
 	padding: 0;
-}
+}*/
 textarea {
 	display: block;
 }
@@ -163,55 +210,55 @@ textarea {
 	overflow: hidden;
 	font-family: "Courier New", Courier, monospace;
 	font-size: 11px;
-	height: 95%;
 }
 .CodeMirror-scroll {
     height: auto;
-    min-height: 50px;
-	max-height: 100%;
 }
-#files {
+#control {
 	position: fixed;
 	top: 0; right: 0; bottom: auto; left: 0;
-	height: 40px;
+	height: 20px;
 	overflow: auto;
 	margin: 0;
 	background-color: white;
 	z-index: 100;
+	padding: 10px;
 }
 #editors {
-	position: absolute;
-	top: 40px; right: 0; bottom: 0; left: 0;
-	height: auto;
+	margin-top:40px;
 	overflow: auto;
-	margin: 0;
-    min-height: 300px;
 }
+#error p,
+#update p {
+	margin: 0;
+}
+#error,
+#update {
+	margin: 0;
+	margin-right: 30px;
+	padding: 0 10px;
+	float: left;
+	
+	background-color: #FFFFE0;
+	border-color: #E6DB55;
+	font-size: 13px;
+	padding: 0 0.6em;
+	border-radius: 3px 3px 3px 3px;
+	border-style: solid;
+	border-width: 1px;line-height: 20px;
+}
+select[name="file"] {
+	margin-right: 30px;
+	float: left;
+}
+textarea[disabled], textarea.css {
+	display: none;
+}
+/*
+*/
 </style>
 </head>
 <body>
-<?php if ( $file && $pass ) { ?>
-
-<form action="./" method="post" id="editors" autocomplete="off">
-	<input type="hidden" value="<?php echo $file ?>" name="editfile" autocomplete="off" />
-	<div style="overflow: hidden; height: 100%">
-		<div style="width: 49%; float: left; overflow: hidden; margin-right: 2%;">
-		<textarea style="display:none;" disabled id="preless" autocomplete="off"><?php
-			echo htmlentities( $preless, ENT_QUOTES, 'UTF-8' );
-		?></textarea>
-		<textarea id="less" name="less" autocomplete="off"><?php echo htmlentities( $less, ENT_QUOTES, 'UTF-8' ); ?></textarea>
-		<textarea style="display:none;" disabled id="postless" autocomplete="off"><?php
-			echo htmlentities( $postless, ENT_QUOTES, 'UTF-8' );
-		?></textarea>
-		</div>
-		<div style="width: 49%; float: left; overflow: hidden;">
-		<div id="error"></div>
-		<textarea id="css" name="css" autocomplete="off"><?php echo htmlentities( $css, ENT_QUOTES, 'UTF-8' ); ?></textarea>
-		</div>
-	</div>
-</form>
-
-<?php } ?>
 
 <form action="./" method="post" id="control" autocomplete="off">
 	<?php if ( $pass ) { ?>
@@ -222,53 +269,105 @@ textarea {
 		$sel = $lessfile == $file ? ' selected="selected"': '';
 		echo '<option' . $sel . '>' . $lessfile . '</option>';
 	}
-	?>
-	<?php if ( count( $lessgroup ) > 0 ): ?>
-	<optgroup label="lessgroup.less">
-		<?php 
-		foreach ( $lessgroup as $lessfile ) {
-			$sel = $lessfile == $file ? ' selected="selected"': '';
-			echo '<option' . $sel . '>' . $lessfile . '</option>';
-		}
+	if ( ! empty( $lessgroups ) ) {
+		foreach ( $lessgroups as $name => $lessgroup ) {
 		?>
-	</optgroup>
+		<optgroup label="<?php echo $name ?>">
+			<?php 
+			foreach ( $lessgroup as $lessfile ) {
+				$sel = $lessfile == $file ? ' selected="selected"': '';
+				echo '<option' . $sel . ' value="' . $lessfile . '&amp;group=' . $name .'">' . $lessfile . '</option>';
+			}
+			?>
+		</optgroup>
+		<?php
+		}
+	} ?>
 	</select>
-	<?php endif; ?>
 	<?php } else { ?>
 	<input type="password" name="lessmakerpassword" />
 	<?php } ?>
+	<div id="error"></div>
+	<div id="update"></div>
 </form>
+<?php if ( $file && $pass ) { ?>
+
+<form action="./" method="post" id="editors" autocomplete="off">
+	<input type="hidden" value="<?php echo $file ?>" name="editfile" autocomplete="off" />
+		<textarea id="less" autocomplete="off" name="less"><?php echo htmlentities( $less, ENT_QUOTES, 'UTF-8' ); ?></textarea>
+		<?php
+		if ( ! empty( $filegroups ) ) {
+			
+			foreach ( $filegroups as $name ) {
+				$preless = isset( $contents[$name]['preless'] ) ? $contents[$name]['preless']: '';
+				$postless = isset( $contents[$name]['postless'] ) ? $contents[$name]['postless']: '';
+				?>
+				<div data-group="<?php echo $name ?>">
+				<textarea disabled class="preless" autocomplete="off"><?php
+					echo htmlentities( $preless, ENT_QUOTES, 'UTF-8' );
+				?></textarea>
+				
+				<textarea disabled class="postless" autocomplete="off"><?php
+					echo htmlentities( $postless, ENT_QUOTES, 'UTF-8' );
+				?></textarea>
+				</div>
+				<?php
+			}
+		} else { ?>
+			<textarea disabled id="preless" autocomplete="off"><?php
+				echo htmlentities( $preless, ENT_QUOTES, 'UTF-8' );
+			?></textarea>
+			<textarea disabled id="postless" autocomplete="off"><?php
+				echo htmlentities( $postless, ENT_QUOTES, 'UTF-8' );
+			?></textarea>
+			<?php
+		}
+		?>
+		
+		<?php
+		if ( ! empty( $filegroups ) ) {
+			foreach ( $filegroups as $name ) {
+				?>
+				<textarea class="css" id="css-<?php echo $name ?>" name="css[<?php echo $name ?>]" data-group="<?php echo $name ?>" autocomplete="off"></textarea>
+				<?php 
+			}
+		} else {
+			?>
+			<textarea class="css" id="css" name="css" autocomplete="off"></textarea>
+			<?php
+		}
+		?>
+</form>
+
+<?php } ?>
 
 <script>
 jQuery( document ).ready( function( $ ) {
 	var loaded = false,
 		$error = $('#error'),
-		$css = $('#css'),
+		$update = $('#update'),
+		$css = $('textarea.css'),
 		$less = $('#less'),
 		$form = $('#editors'),
 		$control = $('#control'),
 		parser = new( less.Parser ),
-		preless = (document.getElementById("preless") || {value:""}).value,
-		postless = (document.getElementById("postless") || {value:""}).value,
 		lesseditor,
-		csseditor,
 		errorLine, errorText,
-		lessElem, cssElem,
-		cookie = 'lessmakerpassword';
-	lessElem = document.getElementById("less");
-	cssElem = document.getElementById("css");
-	$('select[name="file"]',"#control").change( fileChange );
-	function fileChange() {
-		var file = $(this).val();
-		if ( '' != file )
-			window.location.href = window.location.protocol + "//" + window.location.hostname + window.location.pathname + "?file=" + $(this).val();
-	}
+		cookie = 'lessmakerpassword',
+		limit_id;
+	
+	// Handle Logout
 	if ( <?php echo $logout ? 'true' : 'false'; ?> ) {
 		eraseCookie( cookie );
 		window.location.href = window.location.protocol + "//" + window.location.hostname + window.location.pathname
 	}
-	if ( lessElem && cssElem ) {
-		lesseditor = CodeMirror.fromTextArea( lessElem, {
+	
+	// Handle File Select
+	$('select[name="file"]',"#control").change( fileChange );
+	
+	// Main Setup
+	if ( $less.get(0) ) {
+		lesseditor = CodeMirror.fromTextArea( $less.get(0), {
 			theme: "ambiance",
 			lineNumbers : true,
 			matchBrackets : true,
@@ -278,71 +377,82 @@ jQuery( document ).ready( function( $ ) {
 			indentUnit: 4, 
 			onChange: pre_compile,
 		});
-		csseditor = CodeMirror.fromTextArea( cssElem, {
-			theme: "ambiance",
-			lineNumbers : true,
-			matchBrackets : true,
-			indentWithTabs: true,
-			indentWithTabs: true,
-			tabSize: 4,
-			indentUnit: 4, 
-			mode: "css",
-		});
 		compile();
 		loaded = true;
-		csseditor.refresh();
-		lesseditor.refresh();
 		CodeMirror.commands.save = function() {
 			$form.submit();
 		};
 		$form.submit( function( event ){
 			event.preventDefault();
 			compile();
-			$.ajax({  
-				type: "POST",  
-				url: window.location,  
-				data: $(this).serialize()+'&ajaxsubmit=1',
-				cache: false,
-				success: saved 
-			});
+			if ( ! errorText ) {
+				$.ajax({  
+					type: "POST",  
+					url: window.location,  
+					data: $(this).serialize()+'&ajaxsubmit=1',
+					cache: false,
+					success: saved 
+				});
+			} else {
+				$update.html("<p>Saved unavailable until Error is fixed.</p>").show().delay(3000).fadeOut();
+			}
 		});
 	} else {
 		$control.submit( function( event ){
 			createCookie( cookie, $('input[name="lessmakerpassword"]', this).val(), 1 );
 		});
 	}
+	$update.hide();
+	lesseditor.refresh();
+	lesseditor.refresh();
+	lesseditor.refresh();
+	lesseditor.refresh();
+	
 	function saved( data ) {
-		//console.log( data );
+		console.log( data );
+		$update.html("<p>"+ data +"</p>").show().delay(3000).fadeOut();
+	}
+	function fileChange() {
+		var file = $(this).val();
+		if ( '' != file )
+			window.location.href = window.location.protocol + "//" + window.location.hostname + window.location.pathname + "?file=" + $(this).val();
 	}
 	// simple rate limiter
-	var limit_id;
 	function pre_compile() {
 		clearTimeout( limit_id );
 		limit_id = setTimeout( compile, 500 );
 	}
 	function compile() {
 		lesseditor.save();
-		parser.parse( preless + lesseditor.getValue() + postless, function ( err, tree ) {
-			if ( err  ){
-				doError( err );
+		$css.each(function(){
+			$this = $(this);
+			var group = $this.data('group');
+			if ( group ) {
+				if ( ! $this.data( 'preless' ) )
+					$this.data( 'preless', $('div[data-group="' + group + '"] .preless').val() );
+				if ( ! $this.data( 'postless' ) )
+					$this.data( 'postless', $('div[data-group="' + group + '"] .postless').val() );
 			} else {
-				try {
-					$error.hide();
-					csseditor.setValue( tree.toCSS() );
-					csseditor.save();
-					$css.next( '.CodeMirror' ).show();
-					csseditor.refresh();
-					clearCompileError();
-				}
-				catch ( err ) {
-					doError( err );
-				}
+				$this.data( 'preless', '' );
+				$this.data( 'postless', '' );
 			}
+			parser.parse( $this.data( 'preless' ) + lesseditor.getValue() + $this.data( 'postless' ), function ( err, tree ) {
+				if ( err  ){
+					doError( err, $this );
+				} else {
+					//try {
+						$error.fadeOut();
+						$this.val( tree.toCSS() );
+						clearCompileError();
+					//}
+					//catch ( err ) {
+					//	doError( err, $this );
+					//}
+				}
+			});
 		});
 	}
-	function doError( err ) {
-		//console.dir( err );
-		$css.next( '.CodeMirror' ).hide();
+	function doError( err, $this ) {
 		if ( loaded ) {
 			$error.removeClass( 'error' ).addClass( 'updated' );
 			$error.show().html( "<p><strong>Warning: &nbsp; </strong>" + err.message + "</p>" );
@@ -351,7 +461,7 @@ jQuery( document ).ready( function( $ ) {
 		}
 		clearCompileError();
 		
-		var line = err.line - preless.split("\n").length;
+		var line = err.line -  $this.data( 'preless' ).split("\n").length;
 		
 		errorLine = lesseditor.setMarker( line, '<strong>*%N%</strong>', "cm-error");
 		lesseditor.setLineClass( errorLine, "cm-error");
@@ -361,9 +471,6 @@ jQuery( document ).ready( function( $ ) {
 		var start = lesseditor.posFromIndex( err.index );
 		var end = lesseditor.posFromIndex( err.index + token.string.length )
 		errorText = lesseditor.markText( start, end, "cm-error");
-		
-		csseditor.setValue( "" );
-		csseditor.save();
 	}
 	function clearCompileError() {
 		if ( errorLine ) {
