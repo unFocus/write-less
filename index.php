@@ -440,19 +440,21 @@ jQuery( document ).ready( function( $ ) {
 				if ( err  ){
 					doError( err, $this );
 				} else {
-					//try {
+					try {
 						$error.fadeOut();
 						$this.val( tree.toCSS() );
 						clearCompileError();
-					//}
-					//catch ( err ) {
-					//	doError( err, $this );
-					//}
+					}
+					catch ( err ) {
+						doError( err, $this );
+					}
 				}
 			});
 		});
 	}
 	function doError( err, $this ) {
+		console.log( err);
+		
 		if ( loaded ) {
 			$error.removeClass( 'error' ).addClass( 'updated' );
 			$error.show().html( "<p><strong>Warning: &nbsp; </strong>" + err.message + "</p>" );
